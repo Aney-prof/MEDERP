@@ -61,24 +61,31 @@ export const Navbar: React.FC = () => {
   const sixtyDaysAhead = new Date();
   sixtyDaysAhead.setDate(today.getDate() + 60);
 
-  const nearExpiryBatches = medicines.flatMap((m) =>
-    m.batches.filter((b) => {
-      if (!b.expiryDate) return false;
-      const [year, month] = b.expiryDate.split('-').map(Number);
+  const nearExpiryBatches = (medicines || []).flatMap((m) =>
+    (m.batches || []).filter((b) => {
+      const expDateStr = b.expiryDate || b.expiry_date;
+      if (!expDateStr) return false;
+      const parts = expDateStr.split('-');
+      if (parts.length < 2) return false;
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
       const expDate = new Date(year, month - 1, 28);
-      return expDate <= sixtyDaysAhead && b.quantity > 0;
-    }).map((b) => ({ medicineName: m.brandName, ...b }))
+      const qty = b.quantityBaseUnits ?? b.quantity ?? 0;
+      return expDate <= sixtyDaysAhead && qty > 0;
+    }).map((b) => ({ medicineName: m.brandName || m.brand_name, ...b }))
   );
 
-  const lowStockItems = medicines.filter((m) => {
-    const totalQty = m.batches.reduce((sum, b) => sum + (b.isDamaged ? 0 : b.quantity), 0);
-    const minReorder = Math.min(...m.batches.map((b) => b.reorderLevel), 20);
+  const lowStockItems = (medicines || []).filter((m) => {
+    const totalQty = (m.batches || []).reduce((sum, b) => sum + (b.isDamaged ? 0 : (b.quantityBaseUnits ?? b.quantity ?? 0)), 0);
+    const minReorder = (m.batches && m.batches.length > 0)
+      ? Math.min(...m.batches.map((b) => b.reorderLevel ?? b.reorder_level_base_units ?? 20))
+      : (m.minStockAlert ?? 20);
     return totalQty <= minReorder;
   });
 
   // Chronic refills due in next 5 days
-  const pendingRefills = patients.flatMap((p) =>
-    p.prescriptions.flatMap((rx) =>
+  const pendingRefills = (patients || []).flatMap((p) =>
+    (p.prescriptions || []).flatMap((rx) =>
       rx.nextRefillDate
         ? [{ patient: p, rxDate: rx.nextRefillDate, doc: rx.doctorName }]
         : []

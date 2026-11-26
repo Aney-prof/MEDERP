@@ -25,14 +25,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, setIsCollapsed })
   const { activeTab, setActiveTab, batches, patients } = usePharma();
 
   // Compute Near Expiry (<60 days) count
-  const nearExpiryCount = batches.filter(b => {
-    if (!b.expiryDate && !b.expiry_date) return false;
-    const parts = (b.expiryDate || b.expiry_date || '').split('-');
-    if (parts.length !== 2) return false;
+  const nearExpiryCount = (batches || []).filter(b => {
+    const expDateStr = b.expiryDate || b.expiry_date;
+    if (!expDateStr) return false;
+    const parts = expDateStr.split('-');
+    if (parts.length < 2) return false;
     const expDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 28);
     const diffMs = expDate.getTime() - new Date().getTime();
     const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    return days <= 60 && (b.quantityBaseUnits ?? b.quantity_base_units ?? 0) > 0;
+    return days <= 60 && (b.quantityBaseUnits ?? b.quantity_base_units ?? b.quantity ?? 0) > 0;
   }).length;
 
   const navItems = [

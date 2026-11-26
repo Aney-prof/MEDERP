@@ -89,7 +89,60 @@ export class ErpService {
     }
 
     query += ` ORDER BY m.brand_name ASC`;
-    return db.prepare(query).all(...params);
+    const rows = db.prepare(query).all(...params) as any[];
+
+    // Fetch batches for each medicine to maintain full compatibility with frontend components
+    const allBatches = db.prepare(`
+      SELECT b.*, s.name as supplier_name, br.name as branch_name
+      FROM batches b
+      LEFT JOIN suppliers s ON b.supplier_id = s.id
+      LEFT JOIN branches br ON b.branch_id = br.id
+      ORDER BY b.expiry_date ASC
+    `).all() as any[];
+
+    const batchesByMed = new Map<string, any[]>();
+    for (const b of allBatches) {
+      const list = batchesByMed.get(b.medicine_id) || [];
+      list.push({
+        ...b,
+        medicineId: b.medicine_id,
+        batchNumber: b.batch_number,
+        mfgDate: b.mfg_date,
+        expiryDate: b.expiry_date,
+        purchaseRate: b.purchase_rate,
+        saleRate: b.sale_rate,
+        wholesaleRate: b.wholesale_rate,
+        quantityBaseUnits: b.quantity_base_units,
+        quantity: b.quantity_base_units, // Helper for components expecting .quantity
+        reorderLevel: b.reorder_level_base_units,
+        locationRack: b.location_rack,
+        location: b.location_rack,
+        supplierId: b.supplier_id,
+        supplierName: b.supplier_name,
+        branchId: b.branch_id,
+        branchName: b.branch_name,
+        isDamaged: b.is_damaged === 1,
+        receivedDate: b.received_date
+      });
+      batchesByMed.set(b.medicine_id, list);
+    }
+
+    return rows.map(m => ({
+      ...m,
+      brandName: m.brand_name,
+      genericComposition: m.generic_composition,
+      dosageForm: m.dosage_form,
+      hsnCode: m.hsn_code,
+      gstPercent: m.gst_percent,
+      packUnit: m.pack_unit,
+      baseUnit: m.base_unit,
+      unitsPerPack: m.units_per_pack,
+      purchaseRate: m.purchase_rate,
+      temperatureRequirement: m.temperature_requirement,
+      minStockAlert: m.min_stock_alert,
+      isActive: m.is_active === 1,
+      batches: batchesByMed.get(m.id) || []
+    }));
   }
 
   static getMedicineById(id: string): any {
@@ -271,7 +324,35 @@ export class ErpService {
 
     // Default FEFO: earliest expiry first!
     query += ` ORDER BY b.expiry_date ASC, b.quantity_base_units DESC`;
-    return db.prepare(query).all(...params);
+    const rows = db.prepare(query).all(...params) as any[];
+    return rows.map(b => ({
+      ...b,
+      medicineId: b.medicine_id,
+      brandName: b.brand_name,
+      genericComposition: b.generic_composition,
+      packUnit: b.pack_unit,
+      baseUnit: b.base_unit,
+      unitsPerPack: b.units_per_pack,
+      hsnCode: b.hsn_code,
+      gstPercent: b.gst_percent,
+      batchNumber: b.batch_number,
+      mfgDate: b.mfg_date,
+      expiryDate: b.expiry_date,
+      purchaseRate: b.purchase_rate,
+      saleRate: b.sale_rate,
+      wholesaleRate: b.wholesale_rate,
+      quantityBaseUnits: b.quantity_base_units,
+      quantity: b.quantity_base_units,
+      reorderLevel: b.reorder_level_base_units,
+      locationRack: b.location_rack,
+      location: b.location_rack,
+      supplierId: b.supplier_id,
+      supplierName: b.supplier_name,
+      branchId: b.branch_id,
+      branchName: b.branch_name,
+      isDamaged: b.is_damaged === 1,
+      receivedDate: b.received_date
+    }));
   }
 
   static getBatchById(id: string): any {

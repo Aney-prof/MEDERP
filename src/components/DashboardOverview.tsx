@@ -42,12 +42,15 @@ export const DashboardOverview: React.FC = () => {
   let totalStockMrp = 0;
   let totalUnitsInStock = 0;
 
-  medicines.forEach((med) => {
-    med.batches.forEach((b) => {
+  (medicines || []).forEach((med) => {
+    (med.batches || []).forEach((b) => {
       if (!b.isDamaged) {
-        totalStockCost += b.purchaseRate * b.quantity;
-        totalStockMrp += b.mrp * b.quantity;
-        totalUnitsInStock += b.quantity;
+        const qty = b.quantityBaseUnits ?? b.quantity ?? 0;
+        const pRate = b.purchaseRate ?? b.purchase_rate ?? 0;
+        const mrp = b.mrp ?? 0;
+        totalStockCost += pRate * qty;
+        totalStockMrp += mrp * qty;
+        totalUnitsInStock += qty;
       }
     });
   });
@@ -61,34 +64,41 @@ export const DashboardOverview: React.FC = () => {
   const sixtyDaysAhead = new Date();
   sixtyDaysAhead.setDate(today.getDate() + 60);
 
-  const nearExpiryBatches = medicines.flatMap((m) =>
-    m.batches.filter((b) => {
-      if (!b.expiryDate) return false;
-      const [year, month] = b.expiryDate.split('-').map(Number);
+  const nearExpiryBatches = (medicines || []).flatMap((m) =>
+    (m.batches || []).filter((b) => {
+      const expDateStr = b.expiryDate || b.expiry_date;
+      if (!expDateStr) return false;
+      const parts = expDateStr.split('-');
+      if (parts.length < 2) return false;
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
       const expDate = new Date(year, month - 1, 28);
-      return expDate <= sixtyDaysAhead && b.quantity > 0;
+      const qty = b.quantityBaseUnits ?? b.quantity ?? 0;
+      return expDate <= sixtyDaysAhead && qty > 0;
     }).map((b) => ({ medicine: m, batch: b }))
   );
 
   const expiryValueRisk = nearExpiryBatches.reduce(
-    (sum, item) => sum + item.batch.purchaseRate * item.batch.quantity,
+    (sum, item) => sum + (item.batch.purchaseRate ?? item.batch.purchase_rate ?? 0) * (item.batch.quantityBaseUnits ?? item.batch.quantity ?? 0),
     0
   );
 
   // 4. Low Stock Reorder List
-  const lowStockItems = medicines.filter((m) => {
-    const totalQty = m.batches.reduce((sum, b) => sum + (b.isDamaged ? 0 : b.quantity), 0);
-    const minReorder = Math.min(...m.batches.map((b) => b.reorderLevel), 20);
+  const lowStockItems = (medicines || []).filter((m) => {
+    const totalQty = (m.batches || []).reduce((sum, b) => sum + (b.isDamaged ? 0 : (b.quantityBaseUnits ?? b.quantity ?? 0)), 0);
+    const minReorder = (m.batches && m.batches.length > 0)
+      ? Math.min(...m.batches.map((b) => b.reorderLevel ?? b.reorder_level_base_units ?? 20))
+      : (m.minStockAlert ?? 20);
     return totalQty <= minReorder;
   });
 
   // 5. Chronic Refill Reminders Due
-  const patientsDueForRefill = patients.filter((p) =>
-    p.prescriptions.some((rx) => rx.nextRefillDate && new Date(rx.nextRefillDate) <= sixtyDaysAhead)
+  const patientsDueForRefill = (patients || []).filter((p) =>
+    (p.prescriptions || []).some((rx) => rx.nextRefillDate && new Date(rx.nextRefillDate) <= sixtyDaysAhead)
   );
 
   // Total Patient Khata Credit Due
-  const totalKhataOutstanding = patients.reduce((acc, p) => acc + p.creditBalance, 0);
+  const totalKhataOutstanding = (patients || []).reduce((acc, p) => acc + (p.creditBalance || p.credit_balance || 0), 0);
 
   return (
     <div className="space-y-5">
